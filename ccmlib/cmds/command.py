@@ -1,10 +1,15 @@
-import os, sys, shutil
-from optparse import OptionParser, BadOptionError, Option
+import sys
+from optparse import BadOptionError, Option, OptionParser
+
+from six import print_
 
 from ccmlib import common
+from ccmlib.cluster_factory import ClusterFactory
+
 
 # This is fairly fragile, but handy for now
 class ForgivingParser(OptionParser):
+
     def __init__(self, usage=None, option_list=None, option_class=Option, version=None, conflict_handler="error", description=None, formatter=None, add_help_option=True, prog=None, epilog=None):
         OptionParser.__init__(self, usage, option_list, option_class, version, conflict_handler, description, formatter, add_help_option, prog, epilog)
         self.ignored = []
@@ -32,7 +37,9 @@ class ForgivingParser(OptionParser):
     def get_ignored(self):
         return self.ignored
 
+
 class Cmd(object):
+
     def get_parser(self):
         pass
 
@@ -45,25 +52,25 @@ class Cmd(object):
             self.path = options.config_dir
 
         if cluster_name:
-          if len(args) == 0:
-              print >> sys.stderr, 'Missing cluster name'
-              parser.print_help()
-              exit(1)
-          self.name = args[0]
+            if len(args) == 0:
+                print_('Missing cluster name', file=sys.stderr)
+                parser.print_help()
+                exit(1)
+            self.name = args[0]
         if node_name:
-          if len(args) == 0:
-              print >> sys.stderr, 'Missing node name'
-              parser.print_help()
-              exit(1)
-          self.name = args[0]
+            if len(args) == 0:
+                print_('Missing node name', file=sys.stderr)
+                parser.print_help()
+                exit(1)
+            self.name = args[0]
 
         if load_cluster:
-            self.cluster = common.load_current_cluster(self.path)
+            self.cluster = self._load_current_cluster()
             if node_name and load_node:
                 try:
                     self.node = self.cluster.nodes[self.name]
                 except KeyError:
-                    print >> sys.stderr, 'Unknown node %s in cluster %s' % (self.name, self.cluster.name)
+                    print_('Unknown node %s in cluster %s' % (self.name, self.cluster.name), file=sys.stderr)
                     exit(1)
 
     def run(self):
@@ -75,8 +82,19 @@ class Cmd(object):
         else:
             parser = OptionParser(usage=usage, description=description)
         parser.add_option('--config-dir', type="string", dest="config_dir",
-            help="Directory for the cluster files [default to ~/.ccm]")
+                          help="Directory for the cluster files [default to {0}]".format(common.get_default_path_display_name()))
         return parser
 
-    def description():
+    def description(self):
         return ""
+
+    def _load_current_cluster(self):
+        name = common.current_cluster_name(self.path)
+        if name is None:
+            print_('No currently active cluster (use ccm cluster switch)')
+            exit(1)
+        try:
+            return ClusterFactory.load(self.path, name)
+        except common.LoadError as e:
+            print_(str(e))
+            exit(1)
